@@ -33,7 +33,10 @@ typedef struct {
 	char *title;
 	char *subtitle;
 	Window *window;	// pointer to window, could be NULL for switch
-	void *layer_data;	// pointer to layer data, could be MenuLayerData, TextLayerData, or NULL for switch
+	union {
+		MenuLayerData *menu_layer_data;
+		TextLayerData *text_layer_data;
+	};
 } AppData;
 
 typedef struct {
@@ -78,17 +81,20 @@ typedef enum parse_menu_state{
 }ParseMenuState;
 
 static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_data){
-	int i;
 	char *pch = NULL;
-	int state, menu_index, menu_type, option_index;
+	int menu_index, menu_type, option_index;
 	ParseMenuState state = get_type;
+
+	// early error handling
+	if(app_menu_count <= 0)
+		return;
 
 	// allocate space for main_app object and its parameters
 	main_app = (App *)malloc(sizeof(App));
 	main_app->title = (char *)malloc((strlen(app_title)+1)*sizeof(char));
 	strncpy(main_app->title, app_title, sizeof(main_app->title));
 	main_app->menu_count = app_menu_count;
-	main_app->menu = (AppData *)malloc(sizeof(AppData *)*app_menu_count);
+	main_app->menu = malloc(sizeof(AppData *)*app_menu_count);
 
 	// initialize parse state
 	state = get_type;
@@ -109,9 +115,9 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 			else if(menu_type == APP_TYPE_SELECTION)
 				state = selection_get_id;
 			// allocate space for sub menu data
-			app->menu[menu_index] = (AppData *)malloc(sizeof(AppData));
+			main_app->menu[menu_index] = (AppData *)malloc(sizeof(AppData));
 			// setup the app menu type
-			app->menu[menu_index]->type = menu_type;
+			main_app->menu[menu_index]->type = menu_type;
 		}
 		// If it is not get_type state, we store the information to current index
 		else{
@@ -147,24 +153,26 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 				case selection_get_count:
 					// allocate space for layer_data, and store the count
 					option_index = 0;
-					main_app->menu[menu_index]->layer_data = malloc(sizeof(MenuLayerData));
-					main_app->menu[menu_index]->layer_data->option_count = atoi(pch);
+					main_app->menu[menu_index]->menu_layer_data = malloc(sizeof(MenuLayerData));
+					main_app->menu[menu_index]->menu_layer_data->option_count = atoi(pch);
 					// we also allocate space for title/subtitle of each option
-					main_app->menu[menu_index]->layer_data->title = (char *)malloc(sizeof(char *)*main_app->menu[menu_index]->count);
-					main_app->menu[menu_index]->layer_data->subtitle = (char *)malloc(sizeof(char *)*main_app->menu[menu_index]->count);
+					main_app->menu[menu_index]->menu_layer_data->title = 
+						malloc(sizeof(char *) * main_app->menu[menu_index]->menu_layer_data->option_count);
+					main_app->menu[menu_index]->menu_layer_data->subtitle = 
+						malloc(sizeof(char *) * main_app->menu[menu_index]->menu_layer_data->option_count);
 					state = selection_get_option_title;
 					break;
 				case selection_get_option_title:
-					main_app->menu[menu_index]->layer_data->title[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->layer_data->title[option_index], pch, 
-						sizeof(main_app->menu[menu_index]->layer_data->title[option_index]));
+					main_app->menu[menu_index]->menu_layer_data->title[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(main_app->menu[menu_index]->menu_layer_data->title[option_index], pch, 
+						sizeof(main_app->menu[menu_index]->menu_layer_data->title[option_index]));
 					state = selection_get_option_subtitle;
 					break;
 				case selection_get_option_subtitle:
-					main_app->menu[menu_index]->layer_data->subtitle[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->layer_data->subtitle[option_index], pch, 
-						sizeof(main_app->menu[menu_index]->layer_data->subtitle[option_index]));
-					if(option_index >= main_app->menu[menu_index]->count){
+					main_app->menu[menu_index]->menu_layer_data->subtitle[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(main_app->menu[menu_index]->menu_layer_data->subtitle[option_index], pch, 
+						sizeof(main_app->menu[menu_index]->menu_layer_data->subtitle[option_index]));
+					if(option_index >= main_app->menu[menu_index]->menu_layer_data->option_count){
 					// we don't have more options. Prepare to read new menu
 						menu_index++;
 						state = get_type;
@@ -175,7 +183,8 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 						state = selection_get_option_title;
 					}
 					break;
-					
+				default:
+					break;
 			}
 		}
 
@@ -186,9 +195,9 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 static void free_app_data(App *main_app){
 	int i, j;
 	AppData *ptr;
-
+	
 	// free menu items
-	for(i=0;i<menu_count;i++){
+	for(i=0;i<main_app->menu_count;i++){
 		ptr = main_app->menu[i];
 		if(ptr->type == APP_TYPE_SWITCH){
 			if(ptr->id != NULL) free(ptr->id);
@@ -200,10 +209,10 @@ static void free_app_data(App *main_app){
 				window_destroy(ptr->window); 
 				ptr->window = NULL;
 			}
-			if(ptr->layer_data != NULL){
+			if(ptr->menu_layer_data != NULL){
 				// NOTE: should not happen
 				APP_LOG(APP_LOG_LEVEL_WARNING, "Try to free switch layer! Should not happen!");
-				free(ptr->layer_data);
+				free(ptr->menu_layer_data);
 			}
 		}
 		else if(ptr->type == APP_TYPE_SELECTION){
@@ -214,21 +223,21 @@ static void free_app_data(App *main_app){
 				window_destroy(ptr->window);
 				ptr->window = NULL;
 			}
-			if(ptr->layer_data != NULL){
+			if(ptr->menu_layer_data != NULL){
 				// this must be MenuLayerData
-				if(ptr->layer_data->layer != NULL){
-					menu_layer_destroy(ptr->layer_data->layer);
-					ptr->layer_data->layer = NULL;
+				if(ptr->menu_layer_data->layer != NULL){
+					menu_layer_destroy(ptr->menu_layer_data->layer);
+					ptr->menu_layer_data->layer = NULL;
 				}
-				for(j=0;j<ptr->layer_data->count;j++){
-					if(ptr->layer_data->title[j] != NULL)
-						free(ptr->layer_data->title[j]);
-					if(ptr->layer_data->subtitle[j] != NULL)
-						free(ptr->layer_data->subtitle[j]);
+				for(j=0;j<ptr->menu_layer_data->option_count;j++){
+					if(ptr->menu_layer_data->title[j] != NULL)
+						free(ptr->menu_layer_data->title[j]);
+					if(ptr->menu_layer_data->subtitle[j] != NULL)
+						free(ptr->menu_layer_data->subtitle[j]);
 				}
-				free(ptr->layer_data->title);
-				free(ptr->layer_data->subtitle);
-				free(ptr->layer_data);
+				free(ptr->menu_layer_data->title);
+				free(ptr->menu_layer_data->subtitle);
+				free(ptr->menu_layer_data);
 			}
 		}
 		free(ptr);
@@ -237,8 +246,8 @@ static void free_app_data(App *main_app){
 	// free app itself
 	if(main_app->menu != NULL) free(main_app->menu);
 	if(main_app->title != NULL) free(main_app->title);
-	if(main_app->main_app_window != NULL) window_destroy(main_app->main_app_window);
-	if(main_app->main_menu_layer != NULL) window_destroy(main_app->main_menu_layer);
+	if(main_app->app_main_window != NULL) window_destroy(main_app->app_main_window);
+	if(main_app->app_main_menu_layer != NULL) menu_layer_destroy(main_app->app_main_menu_layer);
 }
 
 static void inbox_dropped_callback(AppMessageResult reason, void *context) {
@@ -249,7 +258,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Received message");
 
 	Tuple *t = dict_read_first(iterator);
-	int8_t app_menu_count;
+	int8_t app_menu_count = 0;
 	static char app_title[80];
 	static char app_data[1024];
 	
