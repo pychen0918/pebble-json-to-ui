@@ -1,0 +1,11 @@
+{
+  "title": "LightCtrl01",
+  "menu": {
+    "switch": {
+      "title": "Turn on/off the light",
+      "subtitle": "The living room light"
+      "value": 0,
+      "id": "switch01"
+    }
+  }
+}

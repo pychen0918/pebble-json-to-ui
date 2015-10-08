@@ -1,0 +1,21 @@
+{
+  "uuid": "98fa22f3-ab03-4363-9c32-ad450a87507c",
+  "shortName": "raymondcloud",
+  "longName": "raymondcloud",
+  "companyName": "pychen0918",
+  "versionLabel": "0.1",
+  "sdkVersion": "3",
+  "targetPlatforms": ["aplite"],
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {
+    "KEY_REQ": 1,
+    "KEY_APP_TITLE": 2,
+    "KEY_APP_MENU_COUNT": 3,
+    "KEY_APP_DATA": 4
+  },
+  "resources": {
+    "media": []
+  }
+}
