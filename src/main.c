@@ -84,9 +84,10 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 	char *pch = NULL;
 	int menu_index, menu_type, option_index;
 	ParseMenuState state = get_type;
+	AppData *ptr;
 
 	// early error handling
-	if(app_menu_count <= 0)
+	if(app_menu_count <= 0 || strlen(app_data) <= 0)
 		return;
 
 	// allocate space for main_app object and its parameters
@@ -100,6 +101,7 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 	state = get_type;
 	menu_index = 0;
 	option_index = 0;
+	ptr = main_app->menu[0];
 
 	// main loop, parse elements which separated by '|' one by one
 	// assign to correct data structure by state changes
@@ -115,66 +117,67 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 			else if(menu_type == APP_TYPE_SELECTION)
 				state = selection_get_id;
 			// allocate space for sub menu data
-			main_app->menu[menu_index] = (AppData *)malloc(sizeof(AppData));
+			ptr = (AppData *)malloc(sizeof(AppData));
 			// setup the app menu type
-			main_app->menu[menu_index]->type = menu_type;
+			ptr->type = menu_type;
 		}
 		// If it is not get_type state, we store the information to current index
 		else{
 			switch(state){
 				case switch_get_id:
 				case selection_get_id:
-					main_app->menu[menu_index]->id = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->id, pch, sizeof(main_app->menu[menu_index]->id));
+					ptr->id = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->id, pch, sizeof(ptr->id));
 					state++;
 					break;
 				case switch_get_value:
 				case selection_get_value:
-					main_app->menu[menu_index]->value = atoi(pch);
+					ptr->value = atoi(pch);
 					state++;
 					break;
 				case switch_get_title:
 				case selection_get_title:
-					main_app->menu[menu_index]->title = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->title, pch, sizeof(main_app->menu[menu_index]->title));
+					ptr->title = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->title, pch, sizeof(ptr->title));
 					state++;
 					break;
 				case switch_get_subtitle:
-					main_app->menu[menu_index]->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->subtitle, pch, sizeof(main_app->menu[menu_index]->subtitle));
+					ptr->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->subtitle, pch, sizeof(ptr->subtitle));
 					menu_index++;
 					state = get_type;
 					break;
 				case selection_get_subtitle:
-					main_app->menu[menu_index]->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->subtitle, pch, sizeof(main_app->menu[menu_index]->subtitle));
+					ptr->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->subtitle, pch, sizeof(ptr->subtitle));
 					state++;
 					break;
 				case selection_get_count:
 					// allocate space for layer_data, and store the count
 					option_index = 0;
-					main_app->menu[menu_index]->menu_layer_data = malloc(sizeof(MenuLayerData));
-					main_app->menu[menu_index]->menu_layer_data->option_count = atoi(pch);
+					ptr->menu_layer_data = malloc(sizeof(MenuLayerData));
+					ptr->menu_layer_data->option_count = atoi(pch);
 					// we also allocate space for title/subtitle of each option
-					main_app->menu[menu_index]->menu_layer_data->title = 
-						malloc(sizeof(char *) * main_app->menu[menu_index]->menu_layer_data->option_count);
-					main_app->menu[menu_index]->menu_layer_data->subtitle = 
-						malloc(sizeof(char *) * main_app->menu[menu_index]->menu_layer_data->option_count);
+					ptr->menu_layer_data->title = 
+						malloc(sizeof(char *) * ptr->menu_layer_data->option_count);
+					ptr->menu_layer_data->subtitle = 
+						malloc(sizeof(char *) * ptr->menu_layer_data->option_count);
 					state = selection_get_option_title;
 					break;
 				case selection_get_option_title:
-					main_app->menu[menu_index]->menu_layer_data->title[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->menu_layer_data->title[option_index], pch, 
-						sizeof(main_app->menu[menu_index]->menu_layer_data->title[option_index]));
+					ptr->menu_layer_data->title[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->menu_layer_data->title[option_index], pch, 
+						sizeof(ptr->menu_layer_data->title[option_index]));
 					state = selection_get_option_subtitle;
 					break;
 				case selection_get_option_subtitle:
-					main_app->menu[menu_index]->menu_layer_data->subtitle[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(main_app->menu[menu_index]->menu_layer_data->subtitle[option_index], pch, 
-						sizeof(main_app->menu[menu_index]->menu_layer_data->subtitle[option_index]));
-					if(option_index >= main_app->menu[menu_index]->menu_layer_data->option_count){
+					ptr->menu_layer_data->subtitle[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
+					strncpy(ptr->menu_layer_data->subtitle[option_index], pch, 
+						sizeof(ptr->menu_layer_data->subtitle[option_index]));
+					if(option_index >= ptr->menu_layer_data->option_count){
 					// we don't have more options. Prepare to read new menu
 						menu_index++;
+						ptr = main_app->menu[menu_index];
 						state = get_type;
 					}
 					else{
