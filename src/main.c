@@ -60,6 +60,7 @@ typedef struct {
 	int8_t menu_count;
 	Window *app_main_window;
 	MenuLayer *app_main_menu_layer;
+	int8_t selected_menu_index;
 	AppData **menu; // note this is double pointer, and we will allocate pointer array later
 } App;
 
@@ -252,20 +253,104 @@ static void free_app_data(App *main_app){
 	if(main_app->app_main_menu_layer != NULL) menu_layer_destroy(main_app->app_main_menu_layer);
 }
 
-
 static uint16_t app_main_menu_get_num_rows_callback(struct MenuLayer *menulayer, uint16_t section_index, void *callback_context){
 	return main_app->menu_count;
 }
 
 static void app_main_menu_draw_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context){
-	menu_cell_basic_draw(ctx, cell_layer, main_app->menu[cell_index->row]->title, main_app->menu[cell_index->row]->subtitle, NULL); 
+	static char buf[80];
+	switch(main_app->menu[cell_index->row]->type){
+		case APP_TYPE_SWITCH:
+			// TODO: use icon to indicate the on/off value
+			snprintf(buf, sizeof(buf), "(%s)%s", main_app->menu[cell_index->row]->value>0?"On":"Off", main_app->menu[cell_index->row]->subtitle);
+			menu_cell_basic_draw(ctx, cell_layer, main_app->menu[cell_index->row]->title, buf, NULL); 
+			break;
+		case APP_TYPE_SELECTION:
+			menu_cell_basic_draw(ctx, cell_layer, main_app->menu[cell_index->row]->title, main_app->menu[cell_index->row]->subtitle, NULL); 
+			break;
+		default:
+			APP_LOG(APP_LOG_LEVEL_ERROR, "Try to draw unknown app type:%d", main_app->menu[cell_index->row]->type);
+			break;
+	}
+}
+
+
+static uint16_t selection_menu_get_num_rows_callback(struct MenuLayer *menulayer, uint16_t section_index, void *callback_context){
+	return main_app->menu[main_app->selected_menu_index]->menu_layer_data->option_count;
+}
+
+static void selection_menu_draw_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context){
+	// TODO: use icon for checked item
+	AppData *ptr;
+	char buf[80];
+	ptr = main_app->menu[main_app->selected_menu_index];
+
+	if(ptr->value == cell_index->row){
+		snprintf(buf, sizeof(buf), "(Checked)%s", ptr->menu_layer_data->subtitle[cell_index->row]);
+		menu_cell_basic_draw(ctx, cell_layer, ptr->menu_layer_data->title[cell_index->row], buf, NULL); 
+	}
+	else
+		menu_cell_basic_draw(ctx, cell_layer, ptr->menu_layer_data->title[cell_index->row], ptr->menu_layer_data->subtitle[cell_index->row], NULL); 
+}
+
+static void selection_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context){
+	AppData *ptr;
+
+	ptr = main_app->menu[main_app->selected_menu_index];
+	ptr->value = cell_index->row;
+
+	window_stack_pop(true);
+	// TODO: send response
+}
+
+static void selection_window_load(Window *window){
+	Layer *window_layer = window_get_root_layer(window);
+	GRect bounds = layer_get_bounds(window_layer);
+	AppData *ptr;
+	
+	ptr = main_app->menu[main_app->selected_menu_index];
+
+	ptr->menu_layer_data->layer = menu_layer_create(bounds);
+	menu_layer_set_callbacks(ptr->menu_layer_data->layer, NULL, (MenuLayerCallbacks){
+		.get_num_rows = selection_menu_get_num_rows_callback,
+		.draw_row = selection_menu_draw_row_handler,
+		.select_click = selection_menu_select_callback
+	});
+	menu_layer_set_click_config_onto_window(ptr->menu_layer_data->layer, window);
+
+	layer_add_child(window_layer, menu_layer_get_layer(ptr->menu_layer_data->layer));
+}
+
+static void selection_window_unload(Window *window){
+	menu_layer_destroy(main_app->menu[main_app->selected_menu_index]->menu_layer_data->layer);
 }
 
 static void app_main_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context){
+	int8_t type, index;
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "app main menu: item %d pressed", cell_index->row);
-	switch(cell_index->row){
+
+	main_app->selected_menu_index = index = cell_index->row;
+	type = main_app->menu[index]->type;
+
+	switch(type){
+		case APP_TYPE_SWITCH:
+			// invert value and redraw menu
+			main_app->menu[index]->value = !main_app->menu[index]->value;
+			layer_mark_dirty(menu_layer_get_layer(main_app->app_main_menu_layer));
+			// TODO: send response
+			break;
+		case APP_TYPE_SELECTION:
+			// create new window and push it onto the top
+			main_app->menu[index]->window = window_create();
+			window_set_window_handlers(main_app->menu[index]->window, (WindowHandlers){
+				.load = selection_window_load,
+				.unload = selection_window_unload
+			});
+			window_stack_push(main_app->menu[index]->window, true);
+			// TODO: send response
+			break;
 		default:
-			//APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown main menu operation:%d", cell_index->row);
+			APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown main menu type:%d index:%d", type, index);
 			break;
 	}
 }
@@ -299,8 +384,6 @@ static void app_main_window_unload(Window *window){
 }
 
 static void create_app_ui(App *main_app){
-	//int i;
-
 	// early error handling
 	if(main_app == NULL)
 		return;
@@ -312,10 +395,6 @@ static void create_app_ui(App *main_app){
 		.unload = app_main_window_unload
 	});
 	window_stack_push(main_app->app_main_window, true);
-/*
-	for(i=0;i<main_app->menu_count;i++){
-	}
-*/
 }
 
 static void inbox_dropped_callback(AppMessageResult reason, void *context) {
