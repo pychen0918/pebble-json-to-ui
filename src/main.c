@@ -13,6 +13,22 @@ static MenuLayer *main_menu_layer;
 
 static char main_menu_text[][80] = {"App List", "Setting", "Get Apps"};
 
+typedef enum parse_menu_state{
+	get_type = 0,
+	switch_get_id,
+	switch_get_value,
+	switch_get_title,
+	switch_get_subtitle,
+	selection_get_id,
+	selection_get_value,
+	selection_get_title,
+	selection_get_subtitle,
+	selection_get_count,
+	selection_get_option_title,
+	selection_get_option_subtitle,
+	finish
+}ParseMenuState;
+
 typedef struct {
 	MenuLayer *layer;
 	uint8_t option_count;
@@ -64,27 +80,11 @@ char *my_strtok(char * str, const char * delim){
 	return str;
 }
 
-typedef enum parse_menu_state{
-	get_type = 0,
-	switch_get_id,
-	switch_get_value,
-	switch_get_title,
-	switch_get_subtitle,
-	selection_get_id,
-	selection_get_value,
-	selection_get_title,
-	selection_get_subtitle,
-	selection_get_count,
-	selection_get_option_title,
-	selection_get_option_subtitle,
-	finish
-}ParseMenuState;
-
 static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_data){
 	char *pch = NULL;
 	int menu_index, menu_type, option_index;
 	ParseMenuState state = get_type;
-	AppData *ptr;
+	AppData *ptr = NULL;
 
 	// early error handling
 	if(app_menu_count <= 0 || strlen(app_data) <= 0)
@@ -93,7 +93,7 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 	// allocate space for main_app object and its parameters
 	main_app = (App *)malloc(sizeof(App));
 	main_app->title = (char *)malloc((strlen(app_title)+1)*sizeof(char));
-	strncpy(main_app->title, app_title, sizeof(main_app->title));
+	strncpy(main_app->title, app_title, strlen(app_title));
 	main_app->menu_count = app_menu_count;
 	main_app->menu = malloc(sizeof(AppData *)*app_menu_count);
 
@@ -101,13 +101,12 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 	state = get_type;
 	menu_index = 0;
 	option_index = 0;
-	ptr = main_app->menu[0];
 
 	// main loop, parse elements which separated by '|' one by one
 	// assign to correct data structure by state changes
 	pch = my_strtok(app_data, "|");
 	while(pch != NULL){
-		APP_LOG(APP_LOG_LEVEL_DEBUG, "pch = %s", pch);
+		APP_LOG(APP_LOG_LEVEL_DEBUG, "pch = %s state = %d", pch, state);
 		// If it is get_type state, we are going to create new sub menu
 		if(state == get_type){
 			// determine sub menu type and change state
@@ -117,7 +116,8 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 			else if(menu_type == APP_TYPE_SELECTION)
 				state = selection_get_id;
 			// allocate space for sub menu data
-			ptr = (AppData *)malloc(sizeof(AppData));
+			main_app->menu[menu_index] = (AppData *)malloc(sizeof(AppData));
+			ptr = main_app->menu[menu_index];
 			// setup the app menu type
 			ptr->type = menu_type;
 		}
@@ -127,7 +127,7 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 				case switch_get_id:
 				case selection_get_id:
 					ptr->id = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->id, pch, sizeof(ptr->id));
+					strncpy(ptr->id, pch, strlen(pch));
 					state++;
 					break;
 				case switch_get_value:
@@ -138,18 +138,19 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 				case switch_get_title:
 				case selection_get_title:
 					ptr->title = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->title, pch, sizeof(ptr->title));
+					strncpy(ptr->title, pch, strlen(pch));
+					APP_LOG(APP_LOG_LEVEL_DEBUG, "get title: %s", main_app->menu[0]->title);
 					state++;
 					break;
 				case switch_get_subtitle:
 					ptr->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->subtitle, pch, sizeof(ptr->subtitle));
+					strncpy(ptr->subtitle, pch, strlen(pch));
 					menu_index++;
 					state = get_type;
 					break;
 				case selection_get_subtitle:
 					ptr->subtitle = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->subtitle, pch, sizeof(ptr->subtitle));
+					strncpy(ptr->subtitle, pch, strlen(pch));
 					state++;
 					break;
 				case selection_get_count:
@@ -166,14 +167,12 @@ static void parse_app_data(char *app_title, int8_t app_menu_count, char *app_dat
 					break;
 				case selection_get_option_title:
 					ptr->menu_layer_data->title[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->menu_layer_data->title[option_index], pch, 
-						sizeof(ptr->menu_layer_data->title[option_index]));
+					strncpy(ptr->menu_layer_data->title[option_index], pch, strlen(pch));
 					state = selection_get_option_subtitle;
 					break;
 				case selection_get_option_subtitle:
 					ptr->menu_layer_data->subtitle[option_index] = (char *)malloc((strlen(pch)+1)*sizeof(char));
-					strncpy(ptr->menu_layer_data->subtitle[option_index], pch, 
-						sizeof(ptr->menu_layer_data->subtitle[option_index]));
+					strncpy(ptr->menu_layer_data->subtitle[option_index], pch, strlen(pch));
 					if(option_index >= ptr->menu_layer_data->option_count){
 					// we don't have more options. Prepare to read new menu
 						menu_index++;
@@ -253,6 +252,72 @@ static void free_app_data(App *main_app){
 	if(main_app->app_main_menu_layer != NULL) menu_layer_destroy(main_app->app_main_menu_layer);
 }
 
+
+static uint16_t app_main_menu_get_num_rows_callback(struct MenuLayer *menulayer, uint16_t section_index, void *callback_context){
+	return main_app->menu_count;
+}
+
+static void app_main_menu_draw_row_handler(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context){
+	menu_cell_basic_draw(ctx, cell_layer, main_app->menu[cell_index->row]->title, main_app->menu[cell_index->row]->subtitle, NULL); 
+}
+
+static void app_main_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context){
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "app main menu: item %d pressed", cell_index->row);
+	switch(cell_index->row){
+		default:
+			//APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown main menu operation:%d", cell_index->row);
+			break;
+	}
+}
+
+static int16_t app_main_menu_get_header_height_callback(struct MenuLayer *menu_layer, uint16_t section_index, void *callback_context){
+	return MENU_CELL_BASIC_HEADER_HEIGHT;
+}
+
+static void app_main_menu_draw_header_handler(GContext *ctx, const Layer *cell_layer, uint16_t section_index, void *callback_context){
+	menu_cell_basic_header_draw(ctx, cell_layer, main_app->title);
+}
+
+static void app_main_window_load(Window *window){
+	Layer *window_layer = window_get_root_layer(window);
+	GRect bounds = layer_get_bounds(window_layer);
+
+	main_app->app_main_menu_layer = menu_layer_create(bounds);
+	menu_layer_set_callbacks(main_app->app_main_menu_layer, NULL, (MenuLayerCallbacks){
+		.get_num_rows = app_main_menu_get_num_rows_callback,
+		.draw_row = app_main_menu_draw_row_handler,
+		.select_click = app_main_menu_select_callback,
+		.get_header_height = app_main_menu_get_header_height_callback,
+		.draw_header = app_main_menu_draw_header_handler
+	});
+	menu_layer_set_click_config_onto_window(main_app->app_main_menu_layer, window);
+	layer_add_child(window_layer, menu_layer_get_layer(main_app->app_main_menu_layer));
+}
+
+static void app_main_window_unload(Window *window){
+	menu_layer_destroy(main_app->app_main_menu_layer);
+}
+
+static void create_app_ui(App *main_app){
+	//int i;
+
+	// early error handling
+	if(main_app == NULL)
+		return;
+
+	// setup main window
+	main_app->app_main_window = window_create();
+	window_set_window_handlers(main_app->app_main_window, (WindowHandlers){
+		.load = app_main_window_load,
+		.unload = app_main_window_unload
+	});
+	window_stack_push(main_app->app_main_window, true);
+/*
+	for(i=0;i<main_app->menu_count;i++){
+	}
+*/
+}
+
 static void inbox_dropped_callback(AppMessageResult reason, void *context) {
 	APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped! Reason:%d", reason);
 }
@@ -284,6 +349,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
 	}
 
 	parse_app_data(app_title, app_menu_count, app_data);
+	create_app_ui(main_app);
 }
 
 static void outbox_sent_callback(DictionaryIterator *iterator, void *context) {
@@ -370,3 +436,4 @@ int main(void) {
 	app_event_loop();
 	deinit();
 }
+
