@@ -32,7 +32,7 @@ var testdata = {
   ]
 };
 
-function sendTestData(){
+function send_test_data(){
 	var dictionary = {};
 	var datastring = "";
 	var json = testdata;
@@ -65,6 +65,19 @@ function sendTestData(){
 	);
 }
 
+function update_value(id, value){
+	var i;
+	var json = testdata;
+
+	console.log("id = "+id+" value = "+value);
+	
+	for(i in json.menu){
+		if(json.menu[i].id == id){
+			json.menu[i].value = value;
+		}
+	}
+}
+
 Pebble.addEventListener("ready",
 	function(e) {
 		console.log("Ready");
@@ -75,7 +88,11 @@ Pebble.addEventListener("appmessage",
 	function(e) {
 		var req = e.payload['KEY_REQ'];
 		console.log("Appmessage received req " + req);
-		
-		sendTestData();
+		if(req == 0)  // ask app list
+			send_test_data();
+		else if(req == 1) // update id:value
+			update_value(e.payload['KEY_ID'], e.payload['KEY_VALUE']);
+		else
+			console.log("Error: unknown req:"+req);
 	}
 );

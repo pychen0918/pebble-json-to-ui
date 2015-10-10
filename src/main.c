@@ -1,9 +1,14 @@
 #include <pebble.h>
 
 #define KEY_REQ 1
-#define KEY_APP_TITLE 2
-#define KEY_APP_MENU_COUNT 3
-#define KEY_APP_DATA 4
+#define KEY_ID 2
+#define KEY_VALUE 3
+#define KEY_APP_TITLE 4
+#define KEY_APP_MENU_COUNT 5
+#define KEY_APP_DATA 6
+
+#define REQ_TYPE_APPLIST 0
+#define REQ_TYPE_RESPONSE 1
 
 #define APP_TYPE_SWITCH 1
 #define APP_TYPE_SELECTION 2
@@ -253,6 +258,18 @@ static void free_app_data(App *main_app){
 	if(main_app->app_main_menu_layer != NULL) menu_layer_destroy(main_app->app_main_menu_layer);
 }
 
+static void send_req(int8_t req, char *id, int8_t value){
+	DictionaryIterator *iter;
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "Going to send req %d", req);
+	app_message_outbox_begin(&iter);
+	dict_write_int8(iter, KEY_REQ, req);
+	if(id != NULL){
+		dict_write_cstring(iter, KEY_ID, id);
+		dict_write_int8(iter, KEY_VALUE, value);
+	}
+	app_message_outbox_send();
+}
+
 static uint16_t app_main_menu_get_num_rows_callback(struct MenuLayer *menulayer, uint16_t section_index, void *callback_context){
 	return main_app->menu_count;
 }
@@ -300,7 +317,7 @@ static void selection_menu_select_callback(struct MenuLayer *menu_layer, MenuInd
 	ptr->value = cell_index->row;
 
 	window_stack_pop(true);
-	// TODO: send response
+	send_req(REQ_TYPE_RESPONSE, ptr->id, ptr->value);
 }
 
 static void selection_window_load(Window *window){
@@ -326,31 +343,31 @@ static void selection_window_unload(Window *window){
 }
 
 static void app_main_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context){
-	int8_t type, index;
+	int8_t index;
+	AppData *ptr; 
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "app main menu: item %d pressed", cell_index->row);
 
 	main_app->selected_menu_index = index = cell_index->row;
-	type = main_app->menu[index]->type;
+	ptr = main_app->menu[index];
 
-	switch(type){
+	switch(ptr->type){
 		case APP_TYPE_SWITCH:
 			// invert value and redraw menu
-			main_app->menu[index]->value = !main_app->menu[index]->value;
+			ptr->value = !ptr->value;
 			layer_mark_dirty(menu_layer_get_layer(main_app->app_main_menu_layer));
-			// TODO: send response
+			send_req(REQ_TYPE_RESPONSE, ptr->id, ptr->value);
 			break;
 		case APP_TYPE_SELECTION:
 			// create new window and push it onto the top
-			main_app->menu[index]->window = window_create();
-			window_set_window_handlers(main_app->menu[index]->window, (WindowHandlers){
+			ptr->window = window_create();
+			window_set_window_handlers(ptr->window, (WindowHandlers){
 				.load = selection_window_load,
 				.unload = selection_window_unload
 			});
-			window_stack_push(main_app->menu[index]->window, true);
-			// TODO: send response
+			window_stack_push(ptr->window, true);
 			break;
 		default:
-			APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown main menu type:%d index:%d", type, index);
+			APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown main menu type:%d index:%d", ptr->type, index);
 			break;
 	}
 }
@@ -439,14 +456,6 @@ static void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResul
 	APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed! Reason:%d", reason);
 }
 
-static void send_req(int8_t req){
-	DictionaryIterator *iter;
-	APP_LOG(APP_LOG_LEVEL_DEBUG, "Going to send req %d", req);
-	app_message_outbox_begin(&iter);
-	dict_write_int8(iter, KEY_REQ, req);
-	app_message_outbox_send();
-}
-
 static uint16_t main_menu_get_num_rows_callback(struct MenuLayer *menulayer, uint16_t section_index, void *callback_context){
 	return 3;
 }
@@ -460,7 +469,7 @@ static void main_menu_draw_row_handler(GContext *ctx, const Layer *cell_layer, M
 static void main_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context){
 	switch(cell_index->row){
 		case 0:
-			send_req(1);
+			send_req(REQ_TYPE_APPLIST, NULL, 0);
 			break;
 		case 1:
 			break;
