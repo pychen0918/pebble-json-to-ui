@@ -1,31 +1,31 @@
 var testdata = {
-  "apptitle": "LightCtrl01",
+  "apptitle": "Light Ctrl",
   "menu": [
     {
       "type": "switch",
-      "title": "Turn on/off the light",
-      "subtitle": "The living room light",
+      "title": "Living room light",
+      "subtitle": "Turn on/off the light",
       "value": 0,
       "id": "switch01"
     },
     {
       "type": "selection",
-      "title": "Color selection",
-      "subtitle": "We have 3 options",
+      "title": "Light color",
+      "subtitle": "3 options",
       "value": 0,
       "id": "selection01",
       "options": [
         {
-          "title": "Red",
-          "subtitle": "Pure Red"
+          "title": "Daylight",
+          "subtitle": "Feel Refreshing"
         },
         {
-          "title": "Green",
-          "subtitle": "Pure Green"
+          "title": "Warm",
+          "subtitle": "Relaxing"
         },
         {
-          "title": "Blue",
-          "subtitle": "Pure Blue"
+          "title": "Party",
+          "subtitle": "Colorful!"
         }
       ]
     }
