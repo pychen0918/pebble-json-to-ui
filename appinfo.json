@@ -11,9 +11,11 @@
   },
   "appKeys": {
     "KEY_REQ": 1,
-    "KEY_APP_TITLE": 2,
-    "KEY_APP_MENU_COUNT": 3,
-    "KEY_APP_DATA": 4
+    "KEY_ID": 2,
+    "KEY_VALUE": 3,
+    "KEY_APP_TITLE": 4,
+    "KEY_APP_MENU_COUNT": 5,
+    "KEY_APP_DATA": 6
   },
   "resources": {
     "media": []
